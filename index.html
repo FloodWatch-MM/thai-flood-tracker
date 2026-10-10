@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบตรวจสอบและแจ้งเตือนน้ำท่วม (ทดสอบ)</title>
+    <!-- โหลดแผนที่ Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- โหลด Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        body { margin: 0; display: flex; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100vh; }
+        #map { flex: 3; height: 100%; position: relative; } 
+        #sidebar { flex: 1; min-width: 300px; padding: 20px; background: #f8f9fa; box-shadow: -2px 0 5px rgba(0,0,0,0.1); z-index: 1000; overflow-y: auto; }
+        .station-card { background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 5px solid #007bff; }
+        .danger { border-left-color: #dc3545; }
+        .ad-banner { background: #fff3cd; border: 1px solid #ffe69c; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: center; }
+        .btn-buy { display: inline-block; padding: 10px 20px; background: #ff5722; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <!-- พื้นที่แผนที่ -->
+    <div id="map"></div>
+
+    <!-- แถบเมนูด้านข้าง -->
+    <div id="sidebar">
+        <h2>💧 สถานการณ์น้ำปัจจุบัน</h2>
+        <div id="station-list">กำลังโหลดข้อมูล...</div>
+
+        <!-- พื้นที่โฆษณา / Affiliate -->
+        <div class="ad-banner">
+            <h3>⚠️ เตรียมรับมือน้ำท่วม</h3>
+            <p>ถุงทรายพองน้ำอัตโนมัติ กั้นน้ำเข้าบ้านได้ใน 3 นาที! (เบากว่ากระสอบทราย 10 เท่า)</p>
+            <a href="#" class="btn-buy" target="_blank">🛒 ดูรายละเอียดสินค้า</a>
+        </div>
+    </div>
+
+    <script>
+        // 1. ตั้งค่าเชื่อมต่อ Supabase
+        const SUPABASE_URL = 'https://fnccaedxxyzmfcicvdpg.supabase.co'; 
+        const SUPABASE_KEY = 'sb_publishable_d_ebhPXXCgsmYBSxYrPR9A_OFjQoRTx'; 
+        
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 2. สร้างแผนที่และชั้นข้อมูล (Layers) - อัปเกรดแล้ว
+        // แผนที่ถนนแบบปกติ (OSM)
+        const osmMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        });
+
+        // แผนที่ดาวเทียม Google Earth (เพื่อภาพถ่ายดาวเทียมที่มีความคมชัดสูง)
+        const googleSat = L.tileLayer('http://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            attribution: '© Google'
+        });
+
+        // สร้างแผนที่ โดยให้หน้าแรกแสดงแผนที่ถนนก่อน
+        const map = L.map('map', {
+            center: [13.8, 100.55],
+            zoom: 10,
+            layers: [osmMap] 
+        });
+
+        // เตรียมชั้นข้อมูล WMS ภาพถ่ายดาวเทียมพื้นที่น้ำท่วมจาก GISTDA
+        const gistdaFlood = L.tileLayer.wms('https://ows.gistda.or.th/wms', {
+            layers: 'flood_extent', // ชื่อ Layer นี้ใช้เพื่อการทดสอบ กรุณาตรวจสอบชื่อที่ถูกต้องจากระบบ GISTDA อีกครั้ง
+            format: 'image/png',
+            transparent: true,
+            opacity: 0.6,
+            attribution: '© GISTDA'
+        });
+
+        // สร้างกล่องควบคุม (Layer Control) ที่มุมขวาบน ให้ผู้ใช้กดสลับแผนที่และซ้อนทับภาพน้ำท่วมได้
+        const baseLayers = {
+            "แผนที่ถนน (OSM)": osmMap,
+            "ภาพดาวเทียม (Google Earth)": googleSat
+        };
+        const overlays = {
+            "พื้นที่น้ำท่วมขัง (GISTDA)": gistdaFlood
+        };
+        L.control.layers(baseLayers, overlays, {collapsed: false}).addTo(map);
+
+        // 3. ฟังก์ชันดึงข้อมูลจากฐานข้อมูลมาแสดงบนแผนที่
+        async function fetchFloodData() {
+            const { data, error } = await supabaseClient
+                .from('flood_tracking')
+                .select('*');
+
+            if (error) {
+                console.error('ดึงข้อมูลพลาด:', error);
+                document.getElementById('station-list').innerHTML = '<p style="color:red;">โหลดข้อมูลไม่สำเร็จ</p>';
+                return;
+            }
+
+            document.getElementById('station-list').innerHTML = ''; // ล้างข้อความกำลังโหลด
+
+            data.forEach(station => {
+                const lon = station.geom.coordinates[0];
+                const lat = station.geom.coordinates[1];
+                const level = station.water_level;
+                const isDanger = level > 2.0;
+
+                // วางหมุดบนแผนที่
+                const markerColor = isDanger ? 'red' : 'blue';
+                const marker = L.circleMarker([lat, lon], {
+                    radius: 8, fillColor: markerColor, color: '#fff', weight: 1, opacity: 1, fillOpacity: 0.8
+                }).addTo(map);
+
+                marker.bindPopup(`<b>${station.station_name}</b><br>ระดับน้ำ: ${level} ม.`);
+
+                // เพิ่มข้อมูลลงในแถบด้านข้าง
+                const card = document.createElement('div');
+                card.className = `station-card ${isDanger ? 'danger' : ''}`;
+                card.innerHTML = `
+                    <strong style="font-size: 1.1em;">${station.station_name}</strong><br>
+                    ระดับน้ำ: <b>${level}</b> เมตร <br>
+                    <small>อัปเดต: ${new Date(station.update_time).toLocaleString('th-TH')}</small>
+                `;
+                document.getElementById('station-list').appendChild(card);
+            });
+        }
+
+        fetchFloodData();
+    </script>
+</body>
+</html>
