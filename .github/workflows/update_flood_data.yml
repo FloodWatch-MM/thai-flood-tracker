@@ -2,7 +2,7 @@ name: Update Flood Data Bot
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # สั่งรันอัตโนมัติทุกๆ 30 นาที (แก้ไขตัวเลขได้)
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
