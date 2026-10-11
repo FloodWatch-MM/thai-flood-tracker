@@ -3,122 +3,313 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบตรวจสอบและแจ้งเตือนน้ำท่วม (ทดสอบ)</title>
-    <!-- โหลดแผนที่ Leaflet -->
+    <title>ระบบตรวจสอบและแจ้งเตือนน้ำท่วม (Smart Dashboard)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌊</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- โหลด Supabase -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
     <style>
-        body { margin: 0; display: flex; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100vh; }
-        #map { flex: 3; height: 100%; position: relative; } 
-        #sidebar { flex: 1; min-width: 300px; padding: 20px; background: #f8f9fa; box-shadow: -2px 0 5px rgba(0,0,0,0.1); z-index: 1000; overflow-y: auto; }
-        .station-card { background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 5px solid #007bff; }
-        .danger { border-left-color: #dc3545; }
-        .ad-banner { background: #fff3cd; border: 1px solid #ffe69c; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: center; }
-        .btn-buy { display: inline-block; padding: 10px 20px; background: #ff5722; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px; }
+        :root { --primary: #0ea5e9; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --dark: #1e293b; --light: #f8fafc; --border: #e2e8f0; --gray: #94a3b8; }
+        body { margin: 0; display: flex; font-family: 'Prompt', sans-serif; height: 100vh; overflow: hidden; background-color: var(--light); color: var(--dark); }
+        #map { flex: 3; height: 100%; position: relative; z-index: 1; }
+        #sidebar { flex: 1; min-width: 400px; max-width: 450px; display: flex; flex-direction: column; background: #ffffff; box-shadow: -4px 0 15px rgba(0,0,0,0.05); z-index: 1000; }
+        .sidebar-header { padding: 20px 24px 0; background: white; border-bottom: 1px solid var(--border); }
+        .sidebar-header h2 { margin: 0 0 15px 0; font-size: 1.4rem; font-weight: 600; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 10px 5px; border: none; background: #f1f5f9; border-radius: 8px; font-family: 'Prompt'; font-size: 13px; font-weight: 500; cursor: pointer; color: #64748b; transition: 0.2s; }
+        .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 6px rgba(14, 165, 233, 0.2); }
+        .pane { flex: 1; overflow-y: auto; padding: 20px; background: #f1f5f9; display: none; }
+        .pane.active { display: block; }
+        .stat-box { background: white; padding: 15px 20px; border-radius: 12px; margin-bottom: 12px; text-align: center; border: 1px solid var(--border); cursor:pointer; transition: 0.2s; }
+        .stat-box:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.05); }
+        .stat-num { font-size: 2.2rem; font-weight: 700; margin: 5px 0; }
+        .stat-danger { border-left: 5px solid var(--danger); }
+        .stat-danger .stat-num { color: var(--danger); }
+        .stat-warning { border-left: 5px solid var(--warning); }
+        .stat-warning .stat-num { color: var(--warning); }
+        .stat-safe { border-left: 5px solid var(--success); }
+        .stat-safe .stat-num { color: var(--success); }
+        .stat-error { border-left: 5px solid var(--gray); margin-top: 15px; background: #f8fafc;}
+        .stat-error .stat-num { font-size: 1.8rem; color: var(--gray); }
+        .filter-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+        .search-box, .region-select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-family: 'Prompt'; font-size: 14px; outline: none; transition: 0.2s; background: white; cursor: pointer;}
+        .search-box:focus, .region-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1); }
+        .region-select:disabled { background: #e2e8f0; cursor: not-allowed; }
+        .station-card { background: white; padding: 16px; margin-bottom: 12px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); cursor: pointer; position: relative; overflow: hidden; border: 1px solid rgba(0,0,0,0.05); transition: 0.2s;}
+        .station-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
+        .station-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+        .station-card.safe::before { background: var(--success); }
+        .station-card.warning::before { background: var(--warning); }
+        .station-card.danger::before { background: var(--danger); }
+        .station-card.error::before { background: var(--gray); }
+        .st-name { font-size: 1.1em; font-weight: 600; margin-bottom: 4px; }
+        .st-region { font-size: 12px; color: var(--primary); margin-bottom: 8px; display: inline-block; background: #e0f2fe; padding: 4px 10px; border-radius: 12px; font-weight:500;}
+        .st-level { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; }
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 500; color: white; }
+        .badge.safe { background: var(--success); }
+        .badge.warning { background: var(--warning); }
+        .badge.danger { background: var(--danger); }
+        .badge.error { background: var(--gray); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .leaflet-popup-content { margin: 15px; font-family: 'Prompt'; }
+        .cctv-img { width: 100%; height: 160px; border-radius: 8px; margin: 10px 0; object-fit: cover; display: block; border: 1px solid #cbd5e1; background: #f1f5f9; }
+        .no-cctv { width: 100%; height: 60px; border-radius: 8px; margin: 10px 0; display: flex; align-items: center; justify-content: center; background: #f8fafc; border: 1px dashed #cbd5e1; color: #94a3b8; font-size: 13px; }
+        .social-btn { display: flex; align-items: center; justify-content: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 500; margin-bottom: 6px; transition: 0.2s;}
+        .social-btn:hover { opacity: 0.8; }
     </style>
 </head>
 <body>
-
-    <!-- พื้นที่แผนที่ -->
     <div id="map"></div>
-
-    <!-- แถบเมนูด้านข้าง -->
     <div id="sidebar">
-        <h2>💧 สถานการณ์น้ำปัจจุบัน</h2>
-        <div id="station-list">กำลังโหลดข้อมูล...</div>
+        <div class="sidebar-header">
+            <h2>🌊 Live Flood Monitor</h2>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('overview')">📊 ภาพรวม</button>
+                <button class="tab-btn" onclick="switchTab('list')">📍 ค้นหาพื้นที่</button>
+                <button class="tab-btn" onclick="switchTab('cctv')">📡 เรดาร์ & CCTV</button>
+            </div>
+        </div>
 
-        <!-- พื้นที่โฆษณา / Affiliate -->
-        <div class="ad-banner">
-            <h3>⚠️ เตรียมรับมือน้ำท่วม</h3>
-            <p>ถุงทรายพองน้ำอัตโนมัติ กั้นน้ำเข้าบ้านได้ใน 3 นาที! (เบากว่ากระสอบทราย 10 เท่า)</p>
-            <a href="#" class="btn-buy" target="_blank">🛒 ดูรายละเอียดสินค้า</a>
+        <div id="pane-overview" class="pane active">
+            <h3 style="margin-top:0; color:#475569; font-size:15px; font-weight: 500;">สถานการณ์น้ำทั่วประเทศวันนี้</h3>
+            <div class="stat-box stat-danger" onclick="filterByStatus('danger')">
+                <div style="font-size:15px; font-weight:600;">🔴 สถานการณ์วิกฤต (ล้นตลิ่ง)</div>
+                <div class="stat-num" id="count-danger">0</div>
+            </div>
+            <div class="stat-box stat-warning" onclick="filterByStatus('warning')">
+                <div style="font-size:15px; font-weight:600;">🟡 เฝ้าระวัง (น้ำสูง)</div>
+                <div class="stat-num" id="count-warning">0</div>
+            </div>
+            <div class="stat-box stat-safe" onclick="filterByStatus('safe')">
+                <div style="font-size:15px; font-weight:600;">🟢 สถานการณ์ปกติ</div>
+                <div class="stat-num" id="count-safe">0</div>
+            </div>
+            <div class="stat-box stat-error" onclick="filterByStatus('error')">
+                <div style="font-size:14px; font-weight:600;">⚠️ เซนเซอร์ขัดข้องจากภาครัฐ</div>
+                <div class="stat-num" id="count-error">0</div>
+            </div>
+        </div>
+        
+        <div id="pane-list" class="pane">
+            <div class="filter-group">
+                <select id="provSelect" class="region-select"><option value="all">🌍 ทุกจังหวัด (ดูทั้งหมด)</option></select>
+                <select id="ampSelect" class="region-select" disabled><option value="all">📍 ทุกเขต/อำเภอ (ดูทั้งหมด)</option></select>
+                <input type="text" id="stationSearch" class="search-box" placeholder="🔍 หรือพิมพ์ชื่อสถานีตรงๆ...">
+            </div>
+            <div id="station-list" style="margin-top:5px;">
+                <div style="text-align: center; padding: 40px; color: #94a3b8;">⏳ กำลังโหลดข้อมูล...</div>
+            </div>
+        </div>
+
+        <div id="pane-cctv" class="pane">
+            <h3 style="margin-top:0; color:#475569; font-size:14px; font-weight: 600;">📡 เรดาร์กลุ่มฝน (เลื่อนดูบนนี้ได้เลย)</h3>
+            <iframe width="100%" height="320" src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=%C2%B0C&metricWind=km%2Fh&zoom=5&overlay=rain&product=ecmwf&level=surface&lat=13.75&lon=100.5" frameborder="0" style="border-radius:12px; border:1px solid #cbd5e1; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);"></iframe>
+            <h3 style="margin-top:0; color:#475569; font-size:14px; font-weight: 600;">📹 ถ่ายทอดสดน้ำท่วมทั่วไทย (Live TV)</h3>
+            <iframe width="100%" height="220" src="https://www.youtube.com/embed/live_stream?channel=UCXwU0L86n_Ttvz7rXoA_4uA&autoplay=1&mute=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="border-radius:12px; border:1px solid #cbd5e1; box-shadow: 0 4px 6px rgba(0,0,0,0.05);"></iframe>
         </div>
     </div>
 
     <script>
-        // 1. ตั้งค่าเชื่อมต่อ Supabase
+        let provinceMap = {}; 
+        
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+            if (tabId === 'overview') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.getElementById('pane-overview').classList.add('active');
+            } else if (tabId === 'list') {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                document.getElementById('pane-list').classList.add('active');
+            } else if (tabId === 'cctv') {
+                document.querySelectorAll('.tab-btn')[2].classList.add('active');
+                document.getElementById('pane-cctv').classList.add('active');
+            }
+        }
+
+        function filterByStatus(status) {
+            switchTab('list'); 
+            document.getElementById('provSelect').value = 'all';
+            document.getElementById('ampSelect').value = 'all';
+            document.getElementById('ampSelect').disabled = true;
+            document.getElementById('stationSearch').value = ''; 
+            const cards = document.querySelectorAll('.station-card');
+            cards.forEach(card => {
+                if (card.dataset.status === status) card.style.display = 'block';
+                else card.style.display = 'none';
+            });
+        }
+
+        const map = L.map('map', { center: [13.75, 100.50], zoom: 6, zoomControl: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        const markersCluster = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 40 });
+        
         const SUPABASE_URL = 'https://fnccaedxxyzmfcicvdpg.supabase.co'; 
         const SUPABASE_KEY = 'sb_publishable_d_ebhPXXCgsmYBSxYrPR9A_OFjQoRTx'; 
-        
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // 2. สร้างแผนที่และชั้นข้อมูล (Layers) - อัปเกรดแล้ว
-        // แผนที่ถนนแบบปกติ (OSM)
-        const osmMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        });
-
-        // แผนที่ดาวเทียม Google Earth (เพื่อภาพถ่ายดาวเทียมที่มีความคมชัดสูง)
-        const googleSat = L.tileLayer('http://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-            attribution: '© Google'
-        });
-
-        // สร้างแผนที่ โดยให้หน้าแรกแสดงแผนที่ถนนก่อน
-        const map = L.map('map', {
-            center: [13.8, 100.55],
-            zoom: 10,
-            layers: [osmMap] 
-        });
-
-        // เตรียมชั้นข้อมูล WMS ภาพถ่ายดาวเทียมพื้นที่น้ำท่วมจาก GISTDA
-        const gistdaFlood = L.tileLayer.wms('https://ows.gistda.or.th/wms', {
-            layers: 'flood_extent', // ชื่อ Layer นี้ใช้เพื่อการทดสอบ กรุณาตรวจสอบชื่อที่ถูกต้องจากระบบ GISTDA อีกครั้ง
-            format: 'image/png',
-            transparent: true,
-            opacity: 0.6,
-            attribution: '© GISTDA'
-        });
-
-        // สร้างกล่องควบคุม (Layer Control) ที่มุมขวาบน ให้ผู้ใช้กดสลับแผนที่และซ้อนทับภาพน้ำท่วมได้
-        const baseLayers = {
-            "แผนที่ถนน (OSM)": osmMap,
-            "ภาพดาวเทียม (Google Earth)": googleSat
-        };
-        const overlays = {
-            "พื้นที่น้ำท่วมขัง (GISTDA)": gistdaFlood
-        };
-        L.control.layers(baseLayers, overlays, {collapsed: false}).addTo(map);
-
-        // 3. ฟังก์ชันดึงข้อมูลจากฐานข้อมูลมาแสดงบนแผนที่
         async function fetchFloodData() {
-            const { data, error } = await supabaseClient
-                .from('flood_tracking')
-                .select('*');
+            const { data, error } = await supabaseClient.from('flood_tracking').select('*');
+            if (error) return;
 
-            if (error) {
-                console.error('ดึงข้อมูลพลาด:', error);
-                document.getElementById('station-list').innerHTML = '<p style="color:red;">โหลดข้อมูลไม่สำเร็จ</p>';
-                return;
-            }
-
-            document.getElementById('station-list').innerHTML = ''; // ล้างข้อความกำลังโหลด
+            const listContainer = document.getElementById('station-list');
+            listContainer.innerHTML = ''; 
+            
+            let cntDanger = 0, cntWarning = 0, cntSafe = 0, cntError = 0;
 
             data.forEach(station => {
-                const lon = station.geom.coordinates[0];
-                const lat = station.geom.coordinates[1];
                 const level = station.water_level;
-                const isDanger = level > 2.0;
+                const nameParts = station.station_name.split('||');
+                const stName = nameParts[0];
+                const amphoe = nameParts[1] || 'ไม่ระบุ';
+                const province = nameParts[2] || 'ไม่ระบุ';
+                
+                // 🌟 อ่าน cctv_url จากคอลัมน์ใหม่ตรงๆ ได้เลย
+                const cctvUrl = station.cctv_url || 'ไม่มีกล้อง';
 
-                // วางหมุดบนแผนที่
-                const markerColor = isDanger ? 'red' : 'blue';
-                const marker = L.circleMarker([lat, lon], {
-                    radius: 8, fillColor: markerColor, color: '#fff', weight: 1, opacity: 1, fillOpacity: 0.8
-                }).addTo(map);
+                if(province !== 'ไม่ระบุจังหวัด' && province !== 'ไม่ระบุ') {
+                    if (!provinceMap[province]) provinceMap[province] = new Set();
+                    if(amphoe !== 'ไม่ระบุอำเภอ' && amphoe !== 'ไม่ระบุ') {
+                        provinceMap[province].add(amphoe);
+                    }
+                }
+                
+                let statusClass = 'safe';
+                let statusText = 'ปกติ';
+                let markerColor = '#10b981'; 
+                let levelDisplay = level;
 
-                marker.bindPopup(`<b>${station.station_name}</b><br>ระดับน้ำ: ${level} ม.`);
+                if (level === null || level === -999) {
+                    statusClass = 'error'; statusText = 'เซนเซอร์ขัดข้อง'; markerColor = '#94a3b8'; levelDisplay = 'ไม่ทราบค่า'; cntError++;
+                } else if (level >= 5.0) { 
+                    statusClass = 'danger'; statusText = 'วิกฤต'; markerColor = '#ef4444'; cntDanger++; 
+                } else if (level >= 3.0) { 
+                    statusClass = 'warning'; statusText = 'เฝ้าระวัง'; markerColor = '#f59e0b'; cntWarning++; 
+                } else { 
+                    cntSafe++; 
+                }
 
-                // เพิ่มข้อมูลลงในแถบด้านข้าง
+                let clickAction;
+                if (station.geom && station.geom.coordinates) {
+                    const lon = station.geom.coordinates[0];
+                    const lat = station.geom.coordinates[1];
+                    const marker = L.circleMarker([lat, lon], { radius: 8, fillColor: markerColor, color: '#fff', weight: 2, fillOpacity: 0.9 });
+                    
+                    let cctvHtml = '';
+                    if (cctvUrl !== 'ไม่มีกล้อง' && cctvUrl !== '') {
+                        cctvHtml = `<img src="${cctvUrl}" class="cctv-img" onerror="this.onerror=null; this.outerHTML='<div class=\\'no-cctv\\'>❌ สัญญาณภาพจากรัฐขัดข้อง</div>';">`;
+                    } else {
+                        const searchProv = encodeURIComponent(`น้ำท่วม ${province}`);
+                        cctvHtml = `
+                            <div style="margin-top: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: left;">
+                                <div style="font-size: 12px; color: #64748b; margin-bottom: 8px;">📷 รัฐไม่ได้ติดตั้งกล้องที่นี่ <br>แต่คุณสามารถดูภาพพื้นที่จริงจากชาวบ้านได้:</div>
+                                <a href="https://twitter.com/search?q=${searchProv}&f=live" target="_blank" class="social-btn" style="background: #0f1419; color: #fff;">
+                                    🐦 ดูคลิปน้ำท่วมล่าสุดใน X (Twitter)
+                                </a>
+                                <a href="https://www.tiktok.com/search?q=${searchProv}" target="_blank" class="social-btn" style="background: #00f2fe; color: #000;">
+                                    🎵 ดูคลิปใน TikTok
+                                </a>
+                            </div>
+                        `;
+                    }
+
+                    const popupContent = `
+                        <div style="text-align:center; min-width: 220px;">
+                            <b style="font-size: 16px;">${stName}</b><br>
+                            <span style="font-size: 13px; color: #64748b;">จ.${province} อ.${amphoe}</span>
+                            <div style="margin-top: 5px; font-weight: bold; color: ${markerColor};">ระดับน้ำ: ${levelDisplay} ${levelDisplay !== 'ไม่ทราบค่า' ? 'ม.' : ''}</div>
+                            ${cctvHtml}
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent);
+                    markersCluster.addLayer(marker);
+                    
+                    clickAction = () => {
+                        map.flyTo([lat, lon], 14, { duration: 1.5 });
+                        setTimeout(() => marker.openPopup(), 1500);
+                    };
+                } else {
+                    clickAction = () => { alert('❌ สถานีนี้ไม่ระบุพิกัด GPS จากทางภาครัฐ จึงไม่สามารถแสดงบนแผนที่ได้'); };
+                }
+
                 const card = document.createElement('div');
-                card.className = `station-card ${isDanger ? 'danger' : ''}`;
+                card.className = `station-card ${statusClass}`;
+                card.dataset.name = stName.toLowerCase();
+                card.dataset.prov = province;
+                card.dataset.amp = amphoe;
+                card.dataset.status = statusClass;
+                
                 card.innerHTML = `
-                    <strong style="font-size: 1.1em;">${station.station_name}</strong><br>
-                    ระดับน้ำ: <b>${level}</b> เมตร <br>
-                    <small>อัปเดต: ${new Date(station.update_time).toLocaleString('th-TH')}</small>
+                    <div class="st-name">${stName}</div>
+                    <div class="st-region">📍 จ.${province} > อ.${amphoe}</div>
+                    <div class="st-level">
+                        <span style="color: #64748b; font-size: 14px;">ระดับน้ำ: <b style="color:var(--dark);">${levelDisplay}</b> ${levelDisplay !== 'ไม่ทราบค่า' ? 'ม.' : ''}</span>
+                        <span class="badge ${statusClass}">${statusText}</span>
+                    </div>
                 `;
-                document.getElementById('station-list').appendChild(card);
+                
+                card.addEventListener('click', clickAction);
+                listContainer.appendChild(card);
+            });
+
+            map.addLayer(markersCluster);
+
+            document.getElementById('count-danger').innerText = cntDanger;
+            document.getElementById('count-warning').innerText = cntWarning;
+            document.getElementById('count-safe').innerText = cntSafe;
+            document.getElementById('count-error').innerText = cntError;
+
+            const provSelect = document.getElementById('provSelect');
+            Object.keys(provinceMap).sort().forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.innerText = `📌 จ.${p}`;
+                provSelect.appendChild(opt);
+            });
+        }
+
+        document.getElementById('provSelect').addEventListener('change', function() {
+            const ampSelect = document.getElementById('ampSelect');
+            ampSelect.innerHTML = '<option value="all">📍 ทุกเขต/อำเภอ (ดูทั้งหมด)</option>';
+            if (this.value === 'all') {
+                ampSelect.disabled = true;
+            } else {
+                ampSelect.disabled = false;
+                Array.from(provinceMap[this.value]).sort().forEach(a => {
+                    const opt = document.createElement('option');
+                    opt.value = a;
+                    opt.innerText = `🔹 อ.${a}`;
+                    ampSelect.appendChild(opt);
+                });
+            }
+            applyFilters();
+        });
+
+        document.getElementById('ampSelect').addEventListener('change', applyFilters);
+        document.getElementById('stationSearch').addEventListener('input', applyFilters);
+
+        function applyFilters() {
+            const searchWord = document.getElementById('stationSearch').value.toLowerCase();
+            const provFilter = document.getElementById('provSelect').value;
+            const ampFilter = document.getElementById('ampSelect').value;
+            
+            const cards = document.querySelectorAll('.station-card');
+            cards.forEach(card => {
+                const matchName = card.dataset.name.includes(searchWord);
+                const matchProv = (provFilter === 'all') || (card.dataset.prov === provFilter);
+                const matchAmp = (ampFilter === 'all') || (card.dataset.amp === ampFilter);
+                
+                if (matchName && matchProv && matchAmp) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
             });
         }
 
