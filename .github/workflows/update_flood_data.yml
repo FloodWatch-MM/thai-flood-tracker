@@ -22,7 +22,7 @@ jobs:
           python-version: '3.10'
 
       - name: 3. ติดตั้งไลบรารีที่จำเป็น (Supabase)
-        run: pip install supabase
+        run: pip install psycopg2-binary
 
       - name: 4. สั่งรันไฟล์ดึงข้อมูล
         run: python fetch_data.py
